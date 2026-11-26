@@ -1,0 +1,35 @@
+{
+  "connectorId": "dev-mac",
+  "sql": {
+    "server": "localhost",
+    "port": 1433,
+    "database": "POS",
+    "driver": "tedious",
+    "auth": { "type": "sql", "user": "lefort_ro", "passwordEnv": "LEFORT_SQL_PASSWORD" }
+  },
+  "webhook": {
+    "url": "http://localhost:8787/events",
+    "allowInsecureHttp": true,
+    "tokenEnv": "LEFORT_WEBHOOK_TOKEN",
+    "backoffBaseMs": 1000,
+    "backoffMaxMs": 15000
+  },
+  "capture": {
+    "startMode": "changesOnly",
+    "pollIntervalMs": 1000,
+    "sourceTimeZone": "UTC",
+    "tables": [
+      { "name": "orders", "table": "Orders", "entityType": "order", "primaryKey": "OrderId", "pkType": "int",
+        "columns": ["OrderId", "Status", "Total"], "strategy": "rowversion", "rowversionColumn": "RowVer" },
+      { "name": "order_items", "table": "OrderItems", "entityType": "order_item", "primaryKey": "ItemId", "pkType": "int",
+        "columns": ["ItemId", "OrderId", "Sku", "Qty", "Price"], "strategy": "pkWindow", "hotWindowRows": 50 },
+      { "name": "inventory", "table": "Stock", "entityType": "inventory", "primaryKey": "ProductId", "pkType": "int",
+        "columns": ["ProductId", "Sku", "OnHand"], "strategy": "modifiedAt", "modifiedAtColumn": "LastModified",
+        "modifiedAtType": "datetime", "overlapSeconds": 10 },
+      { "name": "products", "table": "Products", "entityType": "product", "primaryKey": "ProductId", "pkType": "int",
+        "columns": ["ProductId", "Name", "Price"], "strategy": "hashDiff", "sweepIntervalSeconds": 15, "detectDeletes": true }
+    ]
+  },
+  "queue": { "dataDir": "./dev/data" },
+  "logging": { "dir": "./dev/logs", "level": "info" }
+}

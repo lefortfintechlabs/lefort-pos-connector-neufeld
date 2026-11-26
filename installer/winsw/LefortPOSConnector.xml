@@ -1,0 +1,36 @@
+<!--
+  Definición del servicio para WinSW (https://github.com/winsw/winsw).
+  Renombrar WinSW-x64.exe a LefortPOSConnector.exe y colocarlo junto a este XML.
+  SIN PROBAR en este repositorio: validar en Windows 10 Home 22H2 (Fase 5).
+-->
+<service>
+  <id>LefortPOSConnector</id>
+  <name>Lefort POS Connector</name>
+  <description>Detecta cambios (solo lectura) en SQL Server del POS y los envía por HTTPS.</description>
+
+  <executable>%BASE%\runtime\node.exe</executable>
+  <arguments>"%BASE%\app\dist\index.js" run --config "C:\ProgramData\Lefort\POS Connector\config\connector.json"</arguments>
+  <workingdirectory>%BASE%\app</workingdirectory>
+
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <!-- Que SQL Server esté arriba antes de iniciar (el conector además reintenta la conexión). -->
+  <depend>MSSQL$SQLEXPRESS</depend>
+
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+  <!-- Cierre ordenado: la cola y los watermarks son transaccionales, así que un corte brusco también es seguro. -->
+  <stoptimeout>20 sec</stoptimeout>
+
+  <log mode="roll-by-size"><sizeThreshold>5120</sizeThreshold><keepFiles>5</keepFiles></log>
+  <logpath>C:\ProgramData\Lefort\POS Connector\logs</logpath>
+
+  <!-- Cuenta virtual: coincide con el login creado en installer/sql/01-create-readonly-access.sql -->
+  <serviceaccount><username>NT SERVICE\LefortPOSConnector</username></serviceaccount>
+
+  <!-- MVP: el token del webhook como variable de entorno del servicio. Siguiente paso: DPAPI (SDD §9). -->
+  <env name="LEFORT_WEBHOOK_TOKEN" value="REEMPLAZAR"/>
+</service>

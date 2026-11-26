@@ -1,0 +1,59 @@
+{
+  "connectorId": "store-001",
+  "sql": {
+    "server": "lpc:localhost\\SQLEXPRESS",
+    "database": "POS",
+    "driver": "msnodesqlv8",
+    "odbcDriver": "ODBC Driver 18 for SQL Server",
+    "auth": {
+      "type": "windows"
+    },
+    "lockTimeoutMs": 2000
+  },
+  "webhook": {
+    "url": "https://webhook.site/4b24aca2-f53a-499b-8b9f-fd07c99665f5",
+    "tokenEnv": "LEFORT_WEBHOOK_TOKEN",
+    "batchMaxEvents": 100,
+    "timeoutMs": 15000,
+    "devAssumeAckOnSuccess": true
+  },
+  "capture": {
+    "startMode": "changesOnly",
+    "pollIntervalMs": 5000,
+    "pageRows": 500,
+    "maxRowsPerCycle": 2000,
+    "sourceTimeZone": "America/Mexico_City",
+    "tables": [
+      {
+        "table": "@SO1_01VENTA"
+      },
+      {
+        "table": "@SO1_01VENTADETALLE"
+      },
+      {
+        "table": "@SO1_01VENTACOBRO"
+      },
+      {
+        "table": "@SO1_01FACTURA"
+      },
+      {
+        "table": "@SO1_01MOVINVENTARIO"
+      },
+      {
+        "table": "OITW"
+      },
+      {
+        "table": "OBTQ"
+      }
+    ]
+  },
+  "queue": {
+    "dataDir": "C:\\ProgramData\\Lefort\\POS Connector\\data",
+    "maxPendingEvents": 200000,
+    "sentRetentionHours": 24
+  },
+  "logging": {
+    "dir": "C:\\ProgramData\\Lefort\\POS Connector\\logs",
+    "level": "info"
+  }
+}

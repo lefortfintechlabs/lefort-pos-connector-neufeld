@@ -1,0 +1,78 @@
+{
+  "connectorId": "store-001",
+  "sql": {
+    "server": "lpc:localhost\\SQLEXPRESS",
+    "database": "POS",
+    "driver": "msnodesqlv8",
+    "odbcDriver": "ODBC Driver 18 for SQL Server",
+    "auth": { "type": "windows" },
+    "lockTimeoutMs": 2000
+  },
+  "webhook": {
+    "url": "https://api.example.com/lefort/v1/events",
+    "tokenEnv": "LEFORT_WEBHOOK_TOKEN",
+    "batchMaxEvents": 100,
+    "timeoutMs": 15000
+  },
+  "capture": {
+    "startMode": "changesOnly",
+    "pollIntervalMs": 5000,
+    "pageRows": 500,
+    "maxRowsPerCycle": 2000,
+    "sourceTimeZone": "America/Mexico_City",
+    "tables": [
+      {
+        "name": "orders",
+        "schema": "dbo",
+        "table": "Orders",
+        "entityType": "order",
+        "primaryKey": "OrderId",
+        "pkType": "bigint",
+        "columns": ["OrderId", "Status", "Total", "UpdatedAt"],
+        "strategy": "rowversion",
+        "rowversionColumn": "RowVer"
+      },
+      {
+        "name": "order_items",
+        "table": "OrderItems",
+        "entityType": "order_item",
+        "primaryKey": "ItemId",
+        "columns": ["ItemId", "OrderId", "Sku", "Qty", "Price"],
+        "strategy": "pkWindow",
+        "hotWindowRows": 500
+      },
+      {
+        "name": "inventory",
+        "table": "Stock",
+        "entityType": "inventory",
+        "primaryKey": "ProductId",
+        "pkType": "int",
+        "columns": ["ProductId", "Sku", "OnHand"],
+        "strategy": "modifiedAt",
+        "modifiedAtColumn": "LastModified",
+        "modifiedAtType": "datetime",
+        "overlapSeconds": 120
+      },
+      {
+        "name": "products",
+        "table": "Products",
+        "entityType": "product",
+        "primaryKey": "ProductId",
+        "pkType": "int",
+        "columns": ["ProductId", "Name", "Price"],
+        "strategy": "hashDiff",
+        "sweepIntervalSeconds": 600,
+        "detectDeletes": false
+      }
+    ]
+  },
+  "queue": {
+    "dataDir": "C:\\ProgramData\\Lefort\\POS Connector\\data",
+    "maxPendingEvents": 200000,
+    "sentRetentionHours": 24
+  },
+  "logging": {
+    "dir": "C:\\ProgramData\\Lefort\\POS Connector\\logs",
+    "level": "info"
+  }
+}
