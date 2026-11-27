@@ -5,7 +5,7 @@ import type { InitResult, PollContext, PollResult, Strategy } from './types';
 
 interface State extends Record<string, unknown> {
   /** Última PK leída en el barrido en curso (null = inicio). */
-  cursor: string | null;
+  cursor: string | string[] | null;
   /** Número del barrido en curso (se guarda como last_seen en cada fila). */
   sweep: number;
   /** Fin del último barrido completo (ms epoch) para respetar sweepIntervalSeconds. */
@@ -33,12 +33,25 @@ export const hashDiffStrategy: Strategy = {
       if (ctx.now - state.lastSweepEndedAt < table.sweepIntervalSeconds * 1000) return idle;
     }
 
-    const pk = q(table.primaryKey);
+    const keys = table.keyColumns ?? [table.primaryKey];
+    const types = table.keyTypes ?? [table.pkType];
+    const order = keys.map((k) => `${q(k)} ASC`).join(', ');
     const head = `SELECT TOP (@n) ${selectList(table.columns)} FROM ${qualified(table)}`;
-    const firstSql = `${head} ORDER BY ${pk} ASC`;
-    const nextSql = `${head} WHERE ${pk} > @c ORDER BY ${pk} ASC`;
+    const firstSql = `${head} ORDER BY ${order}`;
+    // Paginación por llave (compuesta): (k0 > @c0) OR (k0 = @c0 AND k1 > @c1) ...
+    const after =
+      keys.length === 1
+        ? `${q(keys[0]!)} > @c`
+        : keys
+            .map((_, i) => '(' + [...keys.slice(0, i).map((k, j) => `${q(k)} = @c${j}`), `${q(keys[i]!)} > @c${i}`].join(' AND ') + ')')
+            .join(' OR ');
+    const nextSql = `${head} WHERE ${after} ORDER BY ${order}`;
+    const cursorParams = (vals: string[]) =>
+      Object.fromEntries(
+        vals.map((v, i) => [keys.length === 1 ? 'c' : `c${i}`, { type: pkParamType({ ...table, pkType: types[i]! }), value: v }])
+      );
 
-    let cursor = state.cursor;
+    let cursor: string[] | null = state.cursor === null ? null : [state.cursor].flat();
     const observations = [];
     let total = 0;
     let completed = false;
@@ -49,12 +62,10 @@ export const hashDiffStrategy: Strategy = {
       const rows =
         cursor === null
           ? await ctx.client.query(firstSql, { n: { type: 'int', value: n } })
-          : await ctx.client.query(nextSql, {
-              n: { type: 'int', value: n },
-              c: { type: pkParamType(table), value: cursor }
-            });
+          : await ctx.client.query(nextSql, { n: { type: 'int', value: n }, ...cursorParams(cursor) });
       for (const r of rows) {
-        cursor = pkOf(r, table);
+        pkOf(r, table);
+        cursor = keys.map((k) => String(r[k]));
         observations.push(observe(r, table));
       }
       total += rows.length;
@@ -70,7 +81,7 @@ export const hashDiffStrategy: Strategy = {
 
     const next: State = completed
       ? { cursor: null, sweep: state.sweep + 1, lastSweepEndedAt: ctx.now }
-      : { cursor, sweep: state.sweep, lastSweepEndedAt: state.lastSweepEndedAt };
+      : { cursor: cursor && cursor.length === 1 && keys.length === 1 ? cursor[0]! : cursor, sweep: state.sweep, lastSweepEndedAt: state.lastSweepEndedAt };
     return {
       observations,
       nextState: next,

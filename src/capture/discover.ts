@@ -44,9 +44,11 @@ async function resolveOne(client: SqlClient, t: AutoTable): Promise<TableConfig>
   const firstIndex = keyRows[0]?.index_id;
   let key = keyRows.filter((r) => r.index_id === firstIndex).map((r) => ({ name: String(r.name), type: String(r.type_name) }));
   if (t.primaryKey) {
-    const c = cols.find((x) => x.name === t.primaryKey);
-    if (!c) throw new Error(`${qualified(t)}: primaryKey "${t.primaryKey}" no existe`);
-    key = [{ name: t.primaryKey, type: String(c.type_name) }];
+    key = [t.primaryKey].flat().map((name) => {
+      const c = cols.find((x) => String(x.name).toLowerCase() === name.toLowerCase());
+      if (!c) throw new Error(`${qualified(t)}: primaryKey "${name}" no existe`);
+      return { name: String(c.name), type: String(c.type_name) };
+    });
   }
   if (key.length === 0) {
     throw new Error(`${qualified(t)}: sin llave primaria ni índice único; indique "primaryKey" en la configuración`);
@@ -81,18 +83,13 @@ async function resolveOne(client: SqlClient, t: AutoTable): Promise<TableConfig>
     return { ...common, pkType: pkType ?? 'string', strategy: 'rowversion', rowversionColumn: String(rowversionCol.name) };
   }
 
-  if (key.length > 1) {
-    throw new Error(
-      `${qualified(t)}: llave compuesta (${keyNames.join(', ')}) y sin columna rowversion; ` +
-        'configure la tabla a mano (p. ej. modifiedAt con una columna de fecha) o indique otra "primaryKey"'
-    );
-  }
-  if (!pkType) {
-    throw new Error(`${qualified(t)}: tipo de llave no soportado (${first.type}) en la columna ${first.name}`);
-  }
+  const keyTypes = key.map((k) => pkTypeOf(k.type));
+  const bad = key.find((_, i) => !keyTypes[i]);
+  if (bad) throw new Error(`${qualified(t)}: tipo de llave no soportado (${bad.type}) en la columna ${bad.name}`);
   return {
     ...common,
-    pkType,
+    pkType: pkType!,
+    ...(key.length > 1 ? { keyTypes: keyTypes as NonNullable<TableConfig['pkType']>[] } : {}),
     strategy: 'hashDiff',
     sweepIntervalSeconds: t.sweepIntervalSeconds,
     detectDeletes: t.detectDeletes

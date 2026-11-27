@@ -66,7 +66,15 @@ describe('descubrimiento de tablas (strategy auto)', () => {
     expect(ok.keyColumns).toEqual(['ItemCode', 'WhsCode']);
 
     const noRv = catalog([{ name: 'ItemCode', type_name: 'nvarchar' }, { name: 'WhsCode', type_name: 'nvarchar' }], keys);
-    await expect(resolveTables(noRv, cfgFor([{ table: 'OITW' }]), nullLogger)).rejects.toThrow(/llave compuesta/);
+    const hd = (await resolveTables(noRv, cfgFor([{ table: 'OITW' }]), nullLogger)).capture.tables[0]!;
+    expect(hd).toMatchObject({ strategy: 'hashDiff', keyColumns: ['ItemCode', 'WhsCode'], keyTypes: ['string', 'string'] });
+  });
+
+  it('sin PK ni índice único: error pidiendo primaryKey; con primaryKey (lista) se resuelve', async () => {
+    const cols = [{ name: 'Folio', type_name: 'nvarchar' }, { name: 'Linea', type_name: 'int' }, { name: 'X', type_name: 'int' }];
+    await expect(resolveTables(catalog(cols, []), cfgFor([{ table: 'Fact' }]), nullLogger)).rejects.toThrow(/primaryKey/);
+    const t = (await resolveTables(catalog(cols, []), cfgFor([{ table: 'Fact', primaryKey: ['Folio', 'Linea'] }]), nullLogger)).capture.tables[0]!;
+    expect(t).toMatchObject({ strategy: 'hashDiff', keyColumns: ['Folio', 'Linea'], keyTypes: ['string', 'int'] });
   });
 
   it('tabla inexistente o sin permiso falla con el nombre de la tabla', async () => {

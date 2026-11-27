@@ -15,6 +15,8 @@ const tableBase = {
   pkType: z.enum(['int', 'bigint', 'string']).default('bigint'),
   /** Llave compuesta: el id de la entidad se arma con todas estas columnas (primaryKey es la primera). */
   keyColumns: z.array(ident).min(1).optional(),
+  /** Tipo de cada columna de keyColumns (para paginar por llave compuesta). */
+  keyTypes: z.array(z.enum(['int', 'bigint', 'string'])).min(1).optional(),
   columns: z.array(ident).min(1),
   enabled: z.boolean().default(true)
 };
@@ -28,7 +30,8 @@ const autoTable = z.object({
   strategy: z.literal('auto'),
   columns: z.union([z.literal('*'), z.array(ident).min(1)]).default('*'),
   excludeColumns: z.array(ident).default([]),
-  primaryKey: ident.optional(),
+  /** Una columna o varias (llave compuesta). Obligatorio si la tabla no tiene PK ni índice único. */
+  primaryKey: z.union([ident, z.array(ident).min(1)]).optional(),
   sweepIntervalSeconds: z.number().int().min(10).default(300),
   detectDeletes: z.boolean().default(true),
   enabled: z.boolean().default(true)
@@ -172,7 +175,9 @@ export function parseConfig(raw: unknown): ConnectorConfig {
   // La clave primaria siempre se lee, aunque no esté en la lista de columnas.
   for (const t of cfg.capture.tables) {
     if (t.strategy === 'auto') {
-      if (Array.isArray(t.columns) && t.primaryKey && !t.columns.includes(t.primaryKey)) t.columns.unshift(t.primaryKey);
+      if (Array.isArray(t.columns) && t.primaryKey) {
+        for (const k of [...[t.primaryKey].flat()].reverse()) if (!t.columns.includes(k)) t.columns.unshift(k);
+      }
     } else if (!t.columns.includes(t.primaryKey)) t.columns.unshift(t.primaryKey);
   }
   return cfg;

@@ -261,4 +261,30 @@ describe('S4 hashDiff', () => {
     expect(ev.map((e) => `${e.operation}:${e.entity.id}`).sort()).toEqual(['DELETE:3', 'INSERT:5', 'UPSERT:2']);
     q.close();
   });
+  it('llave compuesta: pagina sin saltarse filas con el mismo primer componente', async () => {
+    const dir = tmpDir();
+    const q = DurableQueue.open(dir);
+    let rows = [['A', 1], ['A', 2], ['A', 3], ['B', 1], ['B', 2], ['C', 1], ['C', 2]].map(([Folio, Part]) => ({ Folio, Part, Qty: 1 }));
+    const client = new ScriptedClient((sql, p) => {
+      const n = p.n!.value as number;
+      const keep = p.c0
+        ? (r: { Folio: unknown; Part: unknown }) =>
+            String(r.Folio) > String(p.c0!.value) || (r.Folio === p.c0!.value && Number(r.Part) > Number(p.c1!.value))
+        : () => true;
+      return rows.filter(keep).sort((a, b) => String(a.Folio).localeCompare(String(b.Folio)) || Number(a.Part) - Number(b.Part)).slice(0, n).map((r) => ({ ...r }));
+    });
+    let clock = 1_000_000;
+    const cfg = makeConfig(dir, [{ name: 'det', table: 'Det', entityType: 'det', primaryKey: 'Folio', keyColumns: ['Folio', 'Part'], keyTypes: ['string', 'int'], pkType: 'string', columns: ['Folio', 'Part', 'Qty'], strategy: 'hashDiff', sweepIntervalSeconds: 60, detectDeletes: true }]);
+    const r = new CaptureReader({ config: cfg, client, queue: q, log: nullLogger, connectorVersion: 't', now: () => clock });
+    for (let i = 0; i < 5; i++) await r.runCycle();
+    expect(q.pendingCount()).toBe(0);
+
+    rows[2] = { Folio: 'A', Part: 3, Qty: 9 };
+    rows = rows.filter((x) => !(x.Folio === 'B' && x.Part === 1));
+    clock += 61_000;
+    for (let i = 0; i < 5; i++) await r.runCycle();
+    const ev = drain(q);
+    expect(ev.map((e) => `${e.operation}:${e.entity.id}`).sort()).toEqual(['DELETE:["B","1"]', 'UPSERT:["A","3"]']);
+    q.close();
+  });
 });
